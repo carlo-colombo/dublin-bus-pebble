@@ -1,62 +1,156 @@
-/**
- * Welcome to Pebble.js!
- *
- * This is where you write your app.
- */
-
 var UI = require('ui');
+var ajax = require('ajax');
 var Vector2 = require('vector2');
+var Accel = require('ui/accel');
+var Vibe = require('ui/vibe');
+var Settings = require('settings');
 
-var main = new UI.Card({
-  title: 'Pebble.js',
-  icon: 'images/menu_icon.png',
-  subtitle: 'Hello World!',
-  body: 'Press any button.',
-  subtitleColor: 'indigo', // Named colors
-  bodyColor: '#9a0036' // Hex colors
+// Show splash screen while waiting for data
+var splashWindow = new UI.Window();
+
+// Text element to inform user
+var text = new UI.Text({
+    position: new Vector2(0, 0),
+    size: new Vector2(144, 168),
+    text:'Downloading weather data...',
+    font:'GOTHIC_28_BOLD',
+    color:'black',
+    textOverflow:'wrap',
+    textAlign:'center',
+    backgroundColor:'white'
 });
 
-main.show();
 
-main.on('click', 'up', function(e) {
-  var menu = new UI.Menu({
+console.log("Is this the correct program ????")
+
+//warming up the server
+ajax({
+    url: 'https://fast-lowlands-9940.herokuapp.com',
+    type: 'json'
+})
+
+// Add to splashWindow and show
+splashWindow.add(text);
+splashWindow.show();
+
+var options = JSON.parse(Settings.option('settings') || '[]'  )
+
+var menuItems =  options.map(function(stop, i){
+    return {
+        subtitle: stop.name,
+        title: stop.stop + "/" + stop.line,
+        stop: stop.stop,
+        line: stop.line
+    }
+})
+
+// Construct Menu to show to user
+var resultsMenu = new UI.Menu({
     sections: [{
-      items: [{
-        title: 'Pebble.js',
-        icon: 'images/menu_icon.png',
-        subtitle: 'Can do Menus'
-      }, {
-        title: 'Second Item',
-        subtitle: 'Subtitle Text'
-      }]
+        title: 'Stops',
+        items: menuItems
     }]
-  });
-  menu.on('select', function(e) {
-    console.log('Selected item #' + e.itemIndex + ' of section #' + e.sectionIndex);
-    console.log('The item is titled "' + e.item.title + '"');
-  });
-  menu.show();
 });
 
-main.on('click', 'select', function(e) {
-  var wind = new UI.Window({
-    fullscreen: true,
-  });
-  var textfield = new UI.Text({
-    position: new Vector2(0, 65),
-    size: new Vector2(144, 30),
-    font: 'gothic-24-bold',
-    text: 'Text Anywhere!',
-    textAlign: 'center'
-  });
-  wind.add(textfield);
-  wind.show();
-});
+var selectedDetail, updating = false
 
-main.on('click', 'down', function(e) {
-  var card = new UI.Card();
-  card.title('A Card');
-  card.subtitle('Is a Window');
-  card.body('The simplest window type in Pebble.js.');
-  card.show();
-});
+function refreshDetail(e){
+    var event = e
+    updating = true
+    console.log("Refreshing info for stop", e.item.title)
+    var title = e.item.title
+    ajax({
+        url: 'https://fast-lowlands-9940.herokuapp.com/stops/' + e.item.stop,
+        type: 'json'
+    },function(data){
+        updating = false
+        var content = data.timetable
+                .map(function(row){
+                    return row.line +' ' +row.time
+                }).join('\n')
+
+        for(var rowIndex in data.timetable){
+            if(data.timetable[rowIndex].line == e.item.line){
+                var time44 = data.timetable[rowIndex].time
+                break
+            }
+        }
+
+        if(time44 && ~~time44.indexOf(":")){
+            var eta = parseInt(time44)
+        }
+
+        var delay
+
+        if (eta <= 2){
+            delay = 30
+        }else if(eta <= 5){
+            delay = 60
+        }else if(eta <=10){
+            delay = 120
+        }else {
+            delay = 300
+        }
+        delay=delay||30
+        console.log("Delay is "+delay+" s")
+
+        if(time44 == "Due"){
+            Vibe.vibrate('double');
+        }
+
+        if(selectedDetail){
+            selectedDetail.hide()
+        }
+
+        var detailCard = selectedDetail = new UI.Card({
+            title: title + " (" + delay/60 + "')",
+            body: content,
+            scrollable:true
+        });
+        detailCard.show();
+        Vibe.vibrate('short');
+
+        var timerId = setTimeout(function(){
+            console.log("Timer running")
+            refreshDetail(event);
+        }, delay*1000);
+
+        console.log("Setting up timer " + timerId + " delay " + delay)
+
+        detailCard.on('hide', function(){
+            console.log('hiding card, remove timer '+ timerId)
+            clearTimeout(timerId)
+        })
+
+        detailCard.on('click','select', function(e){
+            console.log("force updating")
+            if(!updating) {
+                refreshDetail(event);
+            }else{
+                console.log('already updating')
+            }
+        })
+    },function(){
+        updating = false
+    })
+}
+
+resultsMenu.on('select', refreshDetail)
+
+// Show the Menu, hide the splash
+resultsMenu.show();
+splashWindow.hide();
+
+Settings.config({
+    url: "http://output.jsbin.com/layotu",
+}, function(){
+    console.log('opened')
+},function (e){
+
+    Settings.option("settings", JSON.stringify(e.options))
+
+    // Show the raw response if parsing failed
+    if (e.failed) {
+        console.log(e.response);
+    }
+})
