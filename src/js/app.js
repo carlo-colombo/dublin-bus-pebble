@@ -35,22 +35,29 @@ splashWindow.show();
 
 var options = JSON.parse(Settings.option('settings') || '[]'  )
 
-var menuItems =  options.map(function(stop, i){
-    return {
-        subtitle: stop.name,
-        title: stop.stop + "/" + stop.line,
-        stop: stop.stop,
-        line: stop.line
-    }
-})
 
-// Construct Menu to show to user
-var resultsMenu = new UI.Menu({
-    sections: [{
-        title: 'Stops',
-        items: menuItems
-    }]
-});
+function makeMenu(options){
+    var menuItems =  options.map(function(stop, i){
+        return {
+            subtitle: stop.name,
+            title: stop.stop + "/" + stop.line,
+            stop: stop.stop,
+            line: stop.line
+        }
+    })
+
+    // Construct Menu to show to user
+    var resultsMenu = new UI.Menu({
+        sections: [{
+            title: 'Stops',
+            items: menuItems
+        }]
+    });
+
+    return resultsMenu
+}
+
+var resultsMenu = makeMenu(options)
 
 var selectedDetail, updating = false
 
@@ -142,12 +149,18 @@ resultsMenu.show();
 splashWindow.hide();
 
 Settings.config({
-    url: "http://output.jsbin.com/layotu",
+    url: "https://carlo-colombo.github.io/dublin-bus-pebble-configurator",
 }, function(){
     console.log('opened')
 },function (e){
 
     Settings.option("settings", JSON.stringify(e.options))
+
+    options = e.options
+    resultsMenu.hide()
+    resultsMenu.hide()
+    resultsMenu = makeMenu(e.options)
+    resultsMenu.show()
 
     // Show the raw response if parsing failed
     if (e.failed) {
