@@ -4,6 +4,7 @@
 #include "simply_res.h"
 #include "simply_menu.h"
 #include "simply_window_stack.h"
+#include "simply_voice.h"
 
 #include "simply.h"
 
@@ -298,6 +299,10 @@ bool simply_window_disappear(SimplyWindow *self) {
   if (!self->id) {
     return false;
   }
+  // If the window is disappearing because of the dictation API
+  if (simply_voice_dictation_in_progress()) {
+    return false;
+  }
   if (simply_msg_has_communicated()) {
     simply_window_stack_send_hide(self->simply->window_stack, self);
   }
@@ -310,6 +315,9 @@ bool simply_window_disappear(SimplyWindow *self) {
 }
 
 void simply_window_unload(SimplyWindow *self) {
+  // Unregister the click config provider
+  window_set_click_config_provider_with_context(self->window, NULL, NULL);
+
   scroll_layer_destroy(self->scroll_layer);
   self->scroll_layer = NULL;
 }

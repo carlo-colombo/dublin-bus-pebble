@@ -1,3 +1,9 @@
+if (!Array.isArray) {
+    Array.isArray = function(arg) {
+        return Object.prototype.toString.call(arg) === '[object Array]';
+    };
+}
+
 var UI = require('ui');
 var ajax = require('ajax');
 var Vector2 = require('vector2');
@@ -20,21 +26,16 @@ var text = new UI.Text({
     backgroundColor:'white'
 });
 
-
-console.log("Is this the correct program ????")
-
-//warming up the server
-ajax({
-    url: 'https://fast-lowlands-9940.herokuapp.com',
-    type: 'json'
-})
-
 // Add to splashWindow and show
 splashWindow.add(text);
 splashWindow.show();
 
 var options = JSON.parse(Settings.option('settings') || '[]'  )
 
+if (!Array.isArray(options)){
+    console.log('Not an array')
+    options = []
+}
 
 function makeMenu(options){
     var menuItems =  options.map(function(stop, i){
@@ -67,13 +68,14 @@ function refreshDetail(e){
     console.log("Refreshing info for stop", e.item.title)
     var title = e.item.title
     ajax({
-        url: 'https://fast-lowlands-9940.herokuapp.com/stops/' + e.item.stop,
+        url: 'https://bus.litapp.xyz/stops/' + e.item.stop,
         type: 'json'
     },function(data){
         updating = false
         var content = data.timetable
                 .map(function(row){
-                    return row.line +' ' +row.time
+                    var theLine = row.line == e.item.line
+                    return ( theLine? '> ' : '') + row.line +' ' +row.time + ( theLine? ' <' : '')
                 }).join('\n')
 
         for(var rowIndex in data.timetable){
