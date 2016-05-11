@@ -1,6 +1,8 @@
+var Color = require('color');
 var struct = require('struct');
 var util2 = require('util2');
 var myutil = require('myutil');
+var Platform = require('platform');
 var Wakeup = require('wakeup');
 var Timeline = require('timeline');
 var Resource = require('ui/resource');
@@ -11,6 +13,7 @@ var WindowStack = require('ui/windowstack');
 var Window = require('ui/window');
 var Menu = require('ui/menu');
 var StageElement = require('ui/element');
+var Vector2 = require('vector2');
 
 var simply = require('ui/simply');
 
@@ -31,7 +34,7 @@ var BoolType = function(x) {
 };
 
 var StringType = function(x) {
-  return '' + x;
+  return (x === undefined) ? '' : '' + x;
 };
 
 var UTF8ByteLength = function(x) {
@@ -39,12 +42,14 @@ var UTF8ByteLength = function(x) {
 };
 
 var EnumerableType = function(x) {
-  if (typeof x === 'string') {
-    return UTF8ByteLength(x);
-  } else if (x && x.hasOwnProperty('length')) {
+  if (x && x.hasOwnProperty('length')) {
     return x.length;
   }
   return x ? Number(x) : 0;
+};
+
+var StringLengthType = function(x) {
+  return UTF8ByteLength(StringType(x));
 };
 
 var TimeType = function(x) {
@@ -69,73 +74,6 @@ var PositionType = function(x) {
 var SizeType = function(x) {
   this.sizeW(x.x);
   this.sizeH(x.y);
-};
-
-var hexColorMap = {
-  '#000000': 0xC0,
-  '#000055': 0xC1,
-  '#0000AA': 0xC2,
-  '#0000FF': 0xC3,
-  '#005500': 0xC4,
-  '#005555': 0xC5,
-  '#0055AA': 0xC6,
-  '#0055FF': 0xC7,
-  '#00AA00': 0xC8,
-  '#00AA55': 0xC9,
-  '#00AAAA': 0xCA,
-  '#00AAFF': 0xCB,
-  '#00FF00': 0xCC,
-  '#00FF55': 0xCD,
-  '#00FFAA': 0xCE,
-  '#00FFFF': 0xCF,
-  '#550000': 0xD0,
-  '#550055': 0xD1,
-  '#5500AA': 0xD2,
-  '#5500FF': 0xD3,
-  '#555500': 0xD4,
-  '#555555': 0xD5,
-  '#5555AA': 0xD6,
-  '#5555FF': 0xD7,
-  '#55AA00': 0xD8,
-  '#55AA55': 0xD9,
-  '#55AAAA': 0xDA,
-  '#55AAFF': 0xDB,
-  '#55FF00': 0xDC,
-  '#55FF55': 0xDD,
-  '#55FFAA': 0xDE,
-  '#55FFFF': 0xDF,
-  '#AA0000': 0xE0,
-  '#AA0055': 0xE1,
-  '#AA00AA': 0xE2,
-  '#AA00FF': 0xE3,
-  '#AA5500': 0xE4,
-  '#AA5555': 0xE5,
-  '#AA55AA': 0xE6,
-  '#AA55FF': 0xE7,
-  '#AAAA00': 0xE8,
-  '#AAAA55': 0xE9,
-  '#AAAAAA': 0xEA,
-  '#AAAAFF': 0xEB,
-  '#AAFF00': 0xEC,
-  '#AAFF55': 0xED,
-  '#AAFFAA': 0xEE,
-  '#AAFFFF': 0xEF,
-  '#FF0000': 0xF0,
-  '#FF0055': 0xF1,
-  '#FF00AA': 0xF2,
-  '#FF00FF': 0xF3,
-  '#FF5500': 0xF4,
-  '#FF5555': 0xF5,
-  '#FF55AA': 0xF6,
-  '#FF55FF': 0xF7,
-  '#FFAA00': 0xF8,
-  '#FFAA55': 0xF9,
-  '#FFAAAA': 0xFA,
-  '#FFAAFF': 0xFB,
-  '#FFFF00': 0xFC,
-  '#FFFF55': 0xFD,
-  '#FFFFAA': 0xFE,
-  '#FFFFFF': 0xFF,
 };
 
 var namedColorMap = {
@@ -207,45 +145,27 @@ var namedColorMap = {
   'clearWhite': 0x3F,
 };
 
-var Color = function(color) {
-  if (color.charAt(0) === '#') {
-    // Convert shorthand hex to full length for rounding
-    if (color.length === 4) {
-      var r = color.charAt(1);
-      var g = color.charAt(2);
-      var b = color.charAt(3);
-      color = '#'+r+r+g+g+b+b;
-    }
-    // Ensure upper case
-    color = color.toUpperCase();
-    return hexColorMap[roundColor(color)];
+var namedColorMapUpper = (function() {
+  var map = {};
+  for (var k in namedColorMap) {
+    map[k.toUpperCase()] = namedColorMap[k];
   }
-  return namedColorMap[color] ? namedColorMap[color] : namedColorMap.clear;
-};
+  return map;
+})();
 
-var pebbleColors = ['00', '55', 'AA', 'FF'];
-
-var roundColor = function (color) {
-  var rHex = color.substr(1, 2);
-  var gHex = color.substr(3, 2);
-  var bHex = color.substr(5, 2);
-  var r = findClosestColor(rHex, pebbleColors);
-  var g = findClosestColor(gHex, pebbleColors);
-  var b = findClosestColor(bHex, pebbleColors);
-  return '#'+r+g+b;
-};
-
-var findClosestColor = function(color, colors) {
-  var nearestDist = Infinity;
-  var result = color;
-  colors.forEach(function(col) {
-    var dist = Math.abs(parseInt(color, 16) - parseInt(col, 16));
-    if (dist < nearestDist) {
-      nearestDist = dist;
-      result = col;
+var ColorType = function(color) {
+  if (typeof color === 'string') {
+    var name = myutil.toCConstantName(color);
+    name = name.replace(/_+/g, '');
+    if (name in namedColorMapUpper) {
+      return namedColorMapUpper[name];
     }
-  });
-  return result;
+  }
+  var argb = Color.toArgbUint8(color);
+  if ((argb & 0xc0) === 0 && argb !== 0) {
+    argb = argb | 0xc0;
+  }
+  return argb;
 };
 
 var Font = function(x) {
@@ -407,9 +327,11 @@ var CardImageTypes = [
 var CardImageType = makeArrayType(CardImageTypes);
 
 var CardStyleTypes = [
+  'classic-small',
+  'classic-large',
+  'mono',
   'small',
   'large',
-  'mono',
 ];
 
 var CardStyleType = makeArrayType(CardStyleTypes);
@@ -444,6 +366,13 @@ var DictationSessionStatus = [
 // Custom Dictation Errors:
 DictationSessionStatus[64] = "sessionAlreadyInProgress";
 DictationSessionStatus[65] = "noMicrophone";
+
+var StatusBarSeparatorModeTypes = [
+  'none',
+  'dotted',
+];
+
+var StatusBarSeparatorModeType = makeArrayType(StatusBarSeparatorModeTypes);
 
 var Packet = new struct([
   ['uint16', 'type'],
@@ -516,8 +445,7 @@ var WindowHideEventPacket = new struct([
 var WindowPropsPacket = new struct([
   [Packet, 'packet'],
   ['uint32', 'id'],
-  ['uint8', 'backgroundColor', Color],
-  ['bool', 'fullscreen', BoolType],
+  ['uint8', 'backgroundColor', ColorType],
   ['bool', 'scrollable', BoolType],
 ]);
 
@@ -526,13 +454,21 @@ var WindowButtonConfigPacket = new struct([
   ['uint8', 'buttonMask', ButtonFlagsType],
 ]);
 
+var WindowStatusBarPacket = new struct([
+  [Packet, 'packet'],
+  ['uint8', 'backgroundColor', ColorType],
+  ['uint8', 'color', ColorType],
+  ['uint8', 'separator', StatusBarSeparatorModeType],
+  ['uint8', 'status', BoolType],
+]);
+
 var WindowActionBarPacket = new struct([
   [Packet, 'packet'],
   ['uint32', 'up', ImageType],
   ['uint32', 'select', ImageType],
   ['uint32', 'down', ImageType],
+  ['uint8', 'backgroundColor', ColorType],
   ['uint8', 'action', BoolType],
-  ['uint8', 'backgroundColor', Color],
 ]);
 
 var ClickPacket = new struct([
@@ -562,7 +498,7 @@ var CardClearPacket = new struct([
 var CardTextPacket = new struct([
   [Packet, 'packet'],
   ['uint8', 'index', CardTextType],
-  ['uint8', 'color', Color],
+  ['uint8', 'color', ColorType],
   ['cstring', 'text'],
 ]);
 
@@ -630,17 +566,19 @@ var MenuClearSectionPacket = new struct([
 var MenuPropsPacket = new struct([
   [Packet, 'packet'],
   ['uint16', 'sections', EnumerableType],
-  ['uint8', 'backgroundColor', Color],
-  ['uint8', 'textColor', Color],
-  ['uint8', 'highlightBackgroundColor', Color],
-  ['uint8', 'highlightTextColor', Color],
+  ['uint8', 'backgroundColor', ColorType],
+  ['uint8', 'textColor', ColorType],
+  ['uint8', 'highlightBackgroundColor', ColorType],
+  ['uint8', 'highlightTextColor', ColorType],
 ]);
 
 var MenuSectionPacket = new struct([
   [Packet, 'packet'],
   ['uint16', 'section'],
   ['uint16', 'items', EnumerableType],
-  ['uint16', 'titleLength', EnumerableType],
+  ['uint8', 'backgroundColor', ColorType],
+  ['uint8', 'textColor', ColorType],
+  ['uint16', 'titleLength', StringLengthType],
   ['cstring', 'title', StringType],
 ]);
 
@@ -654,8 +592,8 @@ var MenuItemPacket = new struct([
   ['uint16', 'section'],
   ['uint16', 'item'],
   ['uint32', 'icon', ImageType],
-  ['uint16', 'titleLength', EnumerableType],
-  ['uint16', 'subtitleLength', EnumerableType],
+  ['uint16', 'titleLength', StringLengthType],
+  ['uint16', 'subtitleLength', StringLengthType],
   ['cstring', 'title', StringType],
   ['cstring', 'subtitle', StringType],
 ]);
@@ -732,14 +670,27 @@ var ElementCommonPacket = new struct([
   ['uint32', 'id'],
   [GPoint, 'position', PositionType],
   [GSize, 'size', SizeType],
-  ['uint8', 'backgroundColor', Color],
-  ['uint8', 'borderColor', Color],
+  ['uint16', 'borderWidth', EnumerableType],
+  ['uint8', 'backgroundColor', ColorType],
+  ['uint8', 'borderColor', ColorType],
 ]);
 
 var ElementRadiusPacket = new struct([
   [Packet, 'packet'],
   ['uint32', 'id'],
   ['uint16', 'radius', EnumerableType],
+]);
+
+var ElementAnglePacket = new struct([
+  [Packet, 'packet'],
+  ['uint32', 'id'],
+  ['uint16', 'angle', EnumerableType],
+]);
+
+var ElementAngle2Packet = new struct([
+  [Packet, 'packet'],
+  ['uint32', 'id'],
+  ['uint16', 'angle2', EnumerableType],
 ]);
 
 var ElementTextPacket = new struct([
@@ -752,7 +703,7 @@ var ElementTextPacket = new struct([
 var ElementTextStylePacket = new struct([
   [Packet, 'packet'],
   ['uint32', 'id'],
-  ['uint8', 'color', Color],
+  ['uint8', 'color', ColorType],
   ['uint8', 'textOverflow', TextOverflowMode],
   ['uint8', 'textAlign', TextAlignment],
   ['uint32', 'customFont'],
@@ -810,6 +761,7 @@ var CommandPackets = [
   WindowHideEventPacket,
   WindowPropsPacket,
   WindowButtonConfigPacket,
+  WindowStatusBarPacket,
   WindowActionBarPacket,
   ClickPacket,
   LongClickPacket,
@@ -841,6 +793,8 @@ var CommandPackets = [
   ElementRemovePacket,
   ElementCommonPacket,
   ElementRadiusPacket,
+  ElementAnglePacket,
+  ElementAngle2Packet,
   ElementTextPacket,
   ElementTextStylePacket,
   ElementImagePacket,
@@ -971,7 +925,7 @@ var PacketQueue = function() {
   this._send = this.send.bind(this);
 };
 
-PacketQueue.prototype._maxPayloadSize = 2044 - 32;
+PacketQueue.prototype._maxPayloadSize = (Platform.version() === 'aplite' ? 1024 : 2044) - 32;
 
 PacketQueue.prototype.add = function(packet) {
   var byteArray = toByteArray(packet);
@@ -1046,6 +1000,31 @@ SimplyPebble.windowButtonConfig = function(def) {
   SimplyPebble.sendPacket(WindowButtonConfigPacket.buttonMask(def));
 };
 
+var toStatusDef = function(statusDef) {
+  if (typeof statusDef === 'boolean') {
+    statusDef = { status: statusDef };
+  }
+  return statusDef;
+};
+
+SimplyPebble.windowStatusBar = function(def) {
+  var statusDef = toStatusDef(def);
+  WindowStatusBarPacket
+    .separator(statusDef.separator || 'dotted')
+    .status(typeof def === 'boolean' ? def : def.status !== false)
+    .color(statusDef.color || 'black')
+    .backgroundColor(statusDef.backgroundColor || 'white');
+  SimplyPebble.sendPacket(WindowStatusBarPacket);
+};
+
+SimplyPebble.windowStatusBarCompat = function(def) {
+  if (typeof def.fullscreen === 'boolean') {
+    SimplyPebble.windowStatusBar(!def.fullscreen);
+  } else if (def.status !== undefined) {
+    SimplyPebble.windowStatusBar(def.status);
+  }
+};
+
 var toActionDef = function(actionDef) {
   if (typeof actionDef === 'boolean') {
     actionDef = { action: actionDef };
@@ -1059,7 +1038,7 @@ SimplyPebble.windowActionBar = function(def) {
     .up(actionDef.up)
     .select(actionDef.select)
     .down(actionDef.down)
-    .action(typeof def === 'boolean' ? def : true)
+    .action(typeof def === 'boolean' ? def : def.action !== false)
     .backgroundColor(actionDef.backgroundColor || 'black');
   SimplyPebble.sendPacket(WindowActionBarPacket);
 };
@@ -1113,6 +1092,7 @@ SimplyPebble.card = function(def, clear, pushing) {
     SimplyPebble.cardClear(clear);
   }
   SimplyPebble.windowProps(def);
+  SimplyPebble.windowStatusBarCompat(def);
   if (def.action !== undefined) {
     SimplyPebble.windowActionBar(def.action);
   }
@@ -1148,32 +1128,34 @@ SimplyPebble.accelConfig = function(def) {
 };
 
 SimplyPebble.voiceDictationStart = function(callback, enableConfirmation) {
-  // If there's a transcription in progress
-  if (SimplyPebble.dictationCallback) {
-    // Create the eror event
-    var e = {
+  if (Platform.version() === 'aplite') {
+    // If there is no microphone, call with an error event
+    callback({
+      'err': DictationSessionStatus[65],  // noMicrophone
+      'failed': true,
+      'transcription': null,
+    });
+    return;
+  } else if (state.dictationCallback) {
+    // If there's a transcription in progress, call with an error event
+    callback({
       'err': DictationSessionStatus[64],  // dictationAlreadyInProgress
       'failed': true,
       'transcription': null,
-    };
-    
-    // Invoke the callback and return    
-    callback(e);
+    });
     return;
   }
 
   // Set the callback and send the packet
   state.dictationCallback = callback;
   SimplyPebble.sendPacket(VoiceDictationStartPacket.enableConfirmation(enableConfirmation));
-}
+};
 
 SimplyPebble.voiceDictationStop = function() {
-  // Send the message
+  // Send the message and delete the callback
   SimplyPebble.sendPacket(VoiceDictationStopPacket);
-
-  // Clear the callback variable
-  state.dictationCallback = null;
-}
+  delete state.dictationCallback;
+};
 
 SimplyPebble.onVoiceData = function(packet) {
   if (!state.dictationCallback) {
@@ -1181,15 +1163,15 @@ SimplyPebble.onVoiceData = function(packet) {
     console.log("No callback specified for dictation session");
   } else {
     var e = {
-      'err': DictationSessionStatus[packet.status()], 
-      'failed': packet.status() != 0,
+      'err': DictationSessionStatus[packet.status()],
+      'failed': packet.status() !== 0,
       'transcription': packet.transcription(),
     };
-    // invoke and clear the callback
+    // Invoke and delete the callback
     state.dictationCallback(e);
-    state.dictationCallback = null;
+    delete state.dictationCallback;
   }
-}
+};
 
 SimplyPebble.menuClear = function() {
   SimplyPebble.sendPacket(MenuClearPacket);
@@ -1210,6 +1192,8 @@ SimplyPebble.menuSection = function(section, def, clear) {
   MenuSectionPacket
     .section(section)
     .items(def.items)
+    .backgroundColor(def.backgroundColor)
+    .textColor(def.textColor)
     .titleLength(def.title)
     .title(def.title);
   SimplyPebble.sendPacket(MenuSectionPacket);
@@ -1243,6 +1227,7 @@ SimplyPebble.menu = function(def, clear, pushing) {
     SimplyPebble.menuClear();
   }
   SimplyPebble.windowProps(def);
+  SimplyPebble.windowStatusBarCompat(def);
   SimplyPebble.menuProps(def);
 };
 
@@ -1254,17 +1239,41 @@ SimplyPebble.elementRemove = function(id) {
   SimplyPebble.sendPacket(ElementRemovePacket.id(id));
 };
 
+SimplyPebble.elementFrame = function(packet, def, altDef) {
+  var position = def.position || (altDef ? altDef.position : undefined);
+  var position2 = def.position2 || (altDef ? altDef.position2 : undefined);
+  var size = def.size || (altDef ? altDef.size : undefined);
+  if (position && position2) {
+    size = position2.clone().subSelf(position);
+  }
+  packet.position(position);
+  packet.size(size);
+};
+
 SimplyPebble.elementCommon = function(id, def) {
+  if ('strokeColor' in def) {
+    ElementCommonPacket.borderColor(def.strokeColor);
+  }
+  if ('strokeWidth' in def) {
+    ElementCommonPacket.borderWidth(def.strokeWidth);
+  }
+  SimplyPebble.elementFrame(ElementCommonPacket, def);
   ElementCommonPacket
     .id(id)
-    .position(def.position)
-    .size(def.size)
     .prop(def);
   SimplyPebble.sendPacket(ElementCommonPacket);
 };
 
-SimplyPebble.elementRadius = function(id, radius) {
-  SimplyPebble.sendPacket(ElementRadiusPacket.id(id).radius(radius));
+SimplyPebble.elementRadius = function(id, def) {
+  SimplyPebble.sendPacket(ElementRadiusPacket.id(id).radius(def.radius));
+};
+
+SimplyPebble.elementAngle = function(id, def) {
+  SimplyPebble.sendPacket(ElementAnglePacket.id(id).angle(def.angleStart || def.angle));
+};
+
+SimplyPebble.elementAngle2 = function(id, def) {
+  SimplyPebble.sendPacket(ElementAngle2Packet.id(id).angle2(def.angleEnd || def.angle2));
 };
 
 SimplyPebble.elementText = function(id, text, timeUnits) {
@@ -1287,10 +1296,9 @@ SimplyPebble.elementImage = function(id, image, compositing) {
 };
 
 SimplyPebble.elementAnimate = function(id, def, animateDef, duration, easing) {
+  SimplyPebble.elementFrame(ElementAnimatePacket, animateDef, def);
   ElementAnimatePacket
     .id(id)
-    .position(animateDef.position || def.position)
-    .size(animateDef.size || def.size)
     .duration(duration)
     .easing(easing);
   SimplyPebble.sendPacket(ElementAnimatePacket);
@@ -1308,15 +1316,20 @@ SimplyPebble.stageElement = function(id, type, def, index) {
   switch (type) {
     case StageElement.RectType:
     case StageElement.CircleType:
-      SimplyPebble.elementRadius(id, def.radius);
+      SimplyPebble.elementRadius(id, def);
+      break;
+    case StageElement.RadialType:
+      SimplyPebble.elementRadius(id, def);
+      SimplyPebble.elementAngle(id, def);
+      SimplyPebble.elementAngle2(id, def);
       break;
     case StageElement.TextType:
-      SimplyPebble.elementRadius(id, def.radius);
+      SimplyPebble.elementRadius(id, def);
       SimplyPebble.elementTextStyle(id, def);
       SimplyPebble.elementText(id, def.text, def.updateTimeUnits);
       break;
     case StageElement.ImageType:
-      SimplyPebble.elementRadius(id, def.radius);
+      SimplyPebble.elementRadius(id, def);
       SimplyPebble.elementImage(id, def.image, def.compositing);
       break;
   }
@@ -1331,6 +1344,7 @@ SimplyPebble.stage = function(def, clear, pushing) {
     SimplyPebble.windowShow({ type: 'window', pushing: pushing });
   }
   SimplyPebble.windowProps(def);
+  SimplyPebble.windowStatusBarCompat(def);
   if (clear !== undefined) {
     SimplyPebble.stageClear();
   }

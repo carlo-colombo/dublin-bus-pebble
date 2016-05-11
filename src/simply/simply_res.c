@@ -20,6 +20,7 @@ static void destroy_image(SimplyRes *self, SimplyImage *image) {
   list1_remove(&self->images, &image->node);
   gbitmap_destroy(image->bitmap);
   free(image->palette);
+  free(image);
 }
 
 static void destroy_font(SimplyRes *self, SimplyFont *font) {
@@ -171,7 +172,7 @@ SimplyImage *simply_res_auto_image(SimplyRes *self, uint32_t id, bool is_placeho
 }
 
 GFont simply_res_add_custom_font(SimplyRes *self, uint32_t id) {
-  SimplyFont *font = malloc(sizeof(*font));
+  SimplyFont *font = malloc0(sizeof(*font));
   if (!font) {
     return NULL;
   }
@@ -187,6 +188,7 @@ GFont simply_res_add_custom_font(SimplyRes *self, uint32_t id) {
     return NULL;
   }
 
+  font->id = id;
   font->font = custom_font;
 
   list1_prepend(&self->fonts, &font->node);
