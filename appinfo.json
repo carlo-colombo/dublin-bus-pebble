@@ -39,5 +39,10 @@
     "watchapp": {
         "hiddenApp": false,
         "watchface": false
-    }
+    },
+    "targetPlatforms": [
+        "aplite",
+        "basalt",
+        "chalk"
+    ]
 }
